@@ -137,157 +137,120 @@ test('legacy data, CRUD, backup validation, atomic restore and stale tabs', { ti
 
   const book = page.locator('.book')
   const sheet = page.locator('.sheet[data-position=current]')
-  const revealed = book.locator('[data-position=next], [data-position=previous]').filter({ visible: true })
+  const outgoing = book.locator('[data-position=outgoing]')
   const count = page.locator('.album output')
-  const flip = sheet.locator('.flip-target')
-  const hint = page.getByText('Листай страницы свайпом 🍃', { exact: true })
-  await hint.waitFor()
-  assert.equal(await page.getByRole('button', { name: /Предыдущая страница|Следующая страница/ }).count(), 0)
+  const zones = sheet.locator('.photo-zones')
+  const center = zones.getByRole('button', { name: /Показать (заметки|фотографию)/ })
+  const previous = zones.getByRole('button', { name: 'Предыдущий чай' })
+  const next = zones.getByRole('button', { name: 'Следующий чай' })
+  function still() { return outgoing.waitFor({ state: 'detached' }) }
+
+  async function press(fraction, mode = 'touch') {
+    const bounds = await zones.boundingBox()
+    const x = bounds.x + bounds.width * fraction
+    const y = Math.max(0, bounds.y) + Math.min(100, bounds.height / 3)
+    if (mode === 'mouse') await page.mouse.click(x, y)
+    else await page.touchscreen.tap(x, y)
+  }
+
   async function checkPhoto(name, size) {
     const photo = sheet.getByAltText(name)
     assert.deepEqual(await photoSize(photo), size)
     const layout = await photo.evaluate(image => {
       const sheet = image.closest('.sheet').getBoundingClientRect()
       const photo = image.getBoundingClientRect()
-      return { fit: getComputedStyle(image).objectFit, portion: photo.height / sheet.height, viewport: sheet.height / innerHeight }
+      return { fit: getComputedStyle(image).objectFit, portion: photo.height / sheet.height,
+        viewport: sheet.height / innerHeight, noHorizontalScroll: document.documentElement.scrollWidth === innerWidth }
     })
     assert.equal(layout.fit, 'contain')
     assert.ok(layout.portion >= .85 && layout.portion <= .95, JSON.stringify(layout))
-    assert.ok(layout.viewport >= .75, JSON.stringify(layout))
+    assert.ok(layout.viewport >= .75 && layout.noHorizontalScroll, JSON.stringify(layout))
   }
+
+  // The click regions fill exactly 20%, 60%, and 20% of the photo viewport.
+  const widths = await zones.evaluate(node => [...node.children].map(button =>
+    button.getBoundingClientRect().width / node.getBoundingClientRect().width))
+  assert.ok(widths.every((width, index) => Math.abs(width - [.2, .6, .2][index]) < .002))
+  assert.equal(await page.getByRole('button', { name: /Предыдущая страница|Следующая страница/ }).count(), 0)
   await checkPhoto('Гёкуро', [720, 1440])
-  await flip.tap()
+  assert.equal(await next.isDisabled(), true)
+  await press(.9)
+  assert.equal(await count.textContent(), '2 / 2')
+  assert.equal(await center.getAttribute('aria-pressed'), 'false')
+  await press(.22)
   await page.getByRole('button', { name: 'Показать фотографию' }).waitFor()
-  const cdp = await context.newCDPSession(page)
-  let x, y
-  async function beginDrag() {
-    const box = await book.boundingBox()
-    x = Math.round(box.x + box.width / 2)
-    y = Math.round(Math.max(0, box.y) + 65)
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] })
-  }
-  const drag = (dx, dy = 0) => cdp.send('Input.dispatchTouchEvent', {
-    type: 'touchMove', touchPoints: [{ x: x + dx, y: y + dy }],
-  })
-  const release = () => cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
-  const angle = () => book.evaluate(node => parseFloat(node.style.getPropertyValue('--sheet-angle')))
-  const still = async () => {
-    await revealed.waitFor({ state: 'hidden' })
-    assert.equal(await angle(), 0)
-  }
+  await press(.52)
+  await page.getByRole('button', { name: 'Показать заметки' }).waitFor()
+  await press(.78, 'mouse')
+  await page.getByRole('button', { name: 'Показать фотографию' }).waitFor()
 
   const viewport = page.viewportSize()
   await page.setViewportSize({ width: 390, height: 300 })
-  await beginDrag()
+  const cdp = await context.newCDPSession(page)
+  const { x: left, y: top, width } = await zones.boundingBox()
+  const x = Math.round(left + width / 2)
+  const y = Math.round(Math.max(0, top) + 75)
   const startingScroll = await page.evaluate(() => scrollY)
-  await drag(2, -45)
-  await drag(4, -115)
-  await release()
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] })
+  for (const distance of [20, 55, 110]) {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y - distance }] })
+  }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
   await poll(() => page.evaluate(start => scrollY > start, startingScroll))
+  assert.equal(await center.getAttribute('aria-pressed'), 'true')
+  assert.equal(await count.textContent(), '2 / 2')
   await page.setViewportSize(viewport)
   await page.evaluate(() => scrollTo(0, 0))
-  assert.equal(await count.textContent(), '2 / 2')
-  assert.equal(await flip.getAttribute('aria-pressed'), 'true')
 
-  await beginDrag()
-  await drag(-70)
-  await drag(-130)
-  await release()
-  await still()
-  assert.equal(await count.textContent(), '2 / 2')
-  await beginDrag()
-  await drag(15)
-  await drag(26)
-  await poll(async () => (await angle()) < -5)
-  await release()
-  await still()
-  assert.equal(await count.textContent(), '2 / 2')
-  assert.equal(await flip.getAttribute('aria-pressed'), 'true')
-  await hint.waitFor()
-
-  await beginDrag()
-  await drag(32)
-  await drag(74)
-  await poll(async () => (await angle()) < -15)
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchCancel', touchPoints: [] })
-  await still()
-  assert.equal(await count.textContent(), '2 / 2')
-  assert.equal(await flip.getAttribute('aria-pressed'), 'true')
-
-  const incoming = await book.locator('[data-position=previous]').elementHandle()
-  const original = await sheet.boundingBox()
-  await beginDrag()
-  let previous = 0
-  for (const distance of [23, 43, 71, 102, 125]) {
-    await drag(distance)
-    await poll(async () => Math.abs(await angle()) > previous + 1)
-    const current = Math.abs(await angle())
-    assert.ok(current - previous < 22, `jump: ${previous} → ${current}`)
-    previous = current
-    const bounds = await sheet.boundingBox()
-    assert.ok(Math.abs(bounds.x - original.x - distance) < 4, 'the free edge follows the touch')
-    assert.equal(await count.textContent(), '2 / 2')
-  }
-  await revealed.getByAltText('Сэнча').waitFor()
-  await book.evaluate(node => {
-    window.turnFrames = []
-    const start = performance.now()
-    function sample(now) {
-      const angle = parseFloat(node.style.getPropertyValue('--sheet-angle'))
-      window.turnFrames.push(Math.abs(angle))
-      if (angle !== 0 && now - start < 800) requestAnimationFrame(sample)
+  const before = await sheet.boundingBox()
+  await press(.1)
+  await poll(async () => (await count.textContent()) === '1 / 2')
+  const frames = await outgoing.evaluate(old => new Promise(resolve => {
+    const current = old.parentElement.querySelector('[data-position=current]')
+    const frames = []
+    function sample() {
+      const style = getComputedStyle(current)
+      const bounds = current.getBoundingClientRect()
+      frames.push({ opacity: Number(style.opacity), previous: Number(getComputedStyle(old).opacity),
+        oldVisible: getComputedStyle(old).visibility === 'visible', transform: style.transform,
+        box: [bounds.x, bounds.y, bounds.width, bounds.height] })
+      if (style.animationName === 'none' || frames.length > 25) resolve(frames)
+      else requestAnimationFrame(sample)
     }
-    requestAnimationFrame(sample)
-  })
-  await release()
-  // A second swipe during settlement must not cancel or restart the first one.
-  await beginDrag()
-  await drag(-70)
-  await drag(-114)
-  await release()
+    sample()
+  }))
+  assert.ok(frames.some(frame => frame.opacity > 0 && frame.opacity < 1 && frame.previous === 1 && frame.oldVisible))
+  assert.ok(frames.every(frame => frame.transform === 'none' &&
+    frame.box.every((part, axis) => Math.abs(part - [before.x, before.y, before.width, before.height][axis]) < .5)))
+  assert.ok(frames.every((frame, i) => !i || frame.opacity >= frames[i - 1].opacity))
   await still()
-  assert.equal(await count.textContent(), '1 / 2')
-  assert.equal(await flip.getAttribute('aria-pressed'), 'false')
-  assert.equal(await incoming.evaluate(node => node.dataset.position), 'current')
-  const samples = (await page.evaluate(() => window.turnFrames)).filter(value => value > 0)
-  assert.ok(samples.length >= 3)
-  assert.ok(Math.abs(samples[0] - previous) < 3, 'release starts at the last painted angle')
-  assert.ok(samples.every((value, i) => !i || (value >= samples[i - 1] && value - samples[i - 1] < 35)))
-  await hint.waitFor({ state: 'detached' })
   await checkPhoto('Сэнча', [960, 480])
-
-  await beginDrag()
-  await drag(52)
-  await drag(125)
-  await release()
-  await still()
+  assert.equal(await center.getAttribute('aria-pressed'), 'false')
+  assert.equal(await previous.isDisabled(), true)
+  await press(.1, 'mouse')
   assert.equal(await count.textContent(), '1 / 2')
+  await press(.50, 'mouse')
+  await page.getByRole('button', { name: 'Показать фотографию' }).waitFor()
 
-  // Fast leftward swipe with intermediate touch coordinates.
-  await beginDrag()
-  await drag(-24)
-  await drag(-49)
-  await drag(-87)
-  await drag(-129)
-  await poll(async () => (await angle()) > 35)
-  assert.equal(await count.textContent(), '1 / 2')
-  await release()
+  // The first press wins during the fade; navigation works again immediately after it.
+  await press(.90, 'mouse')
+  await press(.10, 'mouse')
+  await press(.90, 'mouse')
   await still()
   assert.equal(await count.textContent(), '2 / 2')
-  await flip.tap()
-  await page.getByRole('button', { name: 'Показать фотографию' }).waitFor()
-  await flip.tap()
-  await page.getByRole('button', { name: 'Показать заметки' }).waitFor()
-  await page.emulateMedia({ reducedMotion: 'reduce' })
-  await page.keyboard.press('ArrowLeft')
+  assert.equal(await center.getAttribute('aria-pressed'), 'false')
+  await press(.10, 'mouse')
   await still()
   assert.equal(await count.textContent(), '1 / 2')
+  await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.keyboard.press('ArrowRight')
   assert.equal(await count.textContent(), '2 / 2')
+  assert.equal(await outgoing.count(), 0)
+  await page.keyboard.press('ArrowLeft')
+  assert.equal(await count.textContent(), '1 / 2')
 
   await page.reload()
   await page.getByAltText('Сэнча').waitFor()
-  await hint.waitFor({ state: 'detached' })
   await edit(page)
   await page.getByLabel('Название чая').fill('Сэнча весенняя')
   await save(page)
