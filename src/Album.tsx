@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Pencil, Star } from 'lucide-react'
 import type { Category, Tea } from './data'
+import { BotanicalPlate, JournalDivider, JournalFrame } from './JournalArt'
 
 export function Cover({ index, className = '' }: { index: number; className?: string }) {
   return <div aria-hidden="true" className={`cover cover-${index} ${className}`} />
@@ -9,27 +10,34 @@ export function Cover({ index, className = '' }: { index: number; className?: st
 const date = (value: string) => new Intl.DateTimeFormat('ru', { dateStyle: 'long', timeZone: 'UTC' }).format(new Date(value))
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
 
-function PageFaces({ tea, category, flipped, number, flipBack }: {
-  tea: Tea; category: Category; flipped: boolean; number: string; flipBack: () => void
+function PageFaces({ tea, category, flipped, number, catalogNumber, flipBack }: {
+  tea: Tea; category: Category; flipped: boolean; number: string; catalogNumber: string; flipBack: () => void
 }) {
   return <div className="sheet-display" onClick={flipped ? flipBack : undefined}>
     <div className={`flip ${flipped ? 'flipped' : ''}`}>
       <div className="face front" aria-hidden={flipped}>
-        {tea.photo ? <img src={tea.photo} alt={tea.name} draggable={false} decoding="async" /> : <span className={`cover cover-${category.cover}`} />}
+        <div className="journal-photo">
+          <JournalFrame />
+          {tea.photo ? <img src={tea.photo} alt={tea.name} draggable={false} decoding="async" />
+            : <div className="journal-no-photo"><BotanicalPlate type={category.cover} /></div>}
+        </div>
         <div className="sheet-caption">
           <span className="sheet-title">{tea.name}</span>
           <span className="page-number">{number}</span>
         </div>
       </div>
       <div className="face back" aria-hidden={!flipped}>
-        <span className="eyebrow">{category.name}</span>
+        <JournalFrame />
+        <span className="archive-kicker">Tea Archive</span>
         <span className="sheet-title">{tea.name}</span>
-        <span className="date">Добавлено {date(tea.added)}</span>
-        {tea.tasted && <span className="date">Дегустация {date(tea.tasted)}</span>}
-        <span className="notes">{tea.notes || 'Пока без заметок 🍃'}</span>
+        <span className="archive-kicker">№ {catalogNumber} · {category.name}</span>
+        <JournalDivider />
+        <span className="date">{tea.tasted ? 'Дегустация ' + date(tea.tasted) : 'Добавлено ' + date(tea.added)}</span>
         {tea.rating > 0 && <span className="stars" aria-label={`Оценка ${tea.rating} из 5`}>
           {Array.from({ length: tea.rating }, (_, i) => <Star key={i} size={18} fill="currentColor" />)}
         </span>}
+        <span className="archive-kicker archive-notes-title">Мои впечатления</span>
+        <span className="notes">{tea.notes || 'Пока без заметок'}</span>
         <span className="page-number back-number">{number}</span>
       </div>
     </div>
@@ -111,7 +119,7 @@ export function Album({ category, teas, index, change, edit }: {
           onAnimationEnd={event => {
             if (event.currentTarget === event.target && active && fading) finishFade()
           }}>
-          <PageFaces tea={item} category={category} flipped={flipped} number={`${position + 1} / ${teas.length}`} flipBack={flipPage} />
+          <PageFaces tea={item} category={category} flipped={flipped} number={`${position + 1} / ${teas.length}`} catalogNumber={String(position + 1).padStart(3, '0')} flipBack={flipPage} />
           <div className={`photo-zones ${flipped ? 'notes-visible' : ''}`}>
             <button type="button" aria-label="Предыдущий чай" disabled={position === 0} onClick={() => requestPage(-1)} />
             <button ref={active ? currentButton : undefined} type="button"

@@ -52,11 +52,14 @@ async function fixture(t) {
 const chestLid = page => page.getByRole('button', { name: 'Открыть шкатулку' })
 const openChest = page => chestLid(page).click()
 const category = page => page.getByRole('link', { name: /Зелёный чай/ })
-const settings = page => page.getByRole('button', { name: 'Настройки', exact: true })
+async function openSettings(page) {
+  await page.getByRole('link', { name: 'Все коллекции' }).click()
+  await page.getByRole('button', { name: 'Настройки', exact: true }).click()
+}
 const add = page => page.getByRole('button', { name: 'Добавить', exact: true }).click()
 const edit = page => page.getByRole('button', { name: 'Редактировать чай' }).click()
 const save = page => page.getByRole('button', { name: 'Сохранить в коллекцию' }).click()
-const close = page => page.getByRole('button', { name: 'Закрыть' }).click()
+const close = page => page.getByRole('button', { name: 'Закрыть', exact: true }).click()
 const alert = page => page.getByRole('alert')
 const dialog = page => page.getByRole('dialog')
 const attach = (page, name, mimeType, buffer) => dialog(page).locator('input[type=file]').setInputFiles({ name, mimeType, buffer })
@@ -99,7 +102,24 @@ test('tea chest opens, closes, keeps album navigation and scrolls custom covers 
   for (const name of ['Зелёный чай', 'Чёрный чай', 'Белый чай', 'Улун', 'Пуэр', 'Травяной чай']) {
     await tray.getByRole('link', { name: new RegExp(name) }).click()
     await page.getByRole('heading', { name, exact: true }).waitFor()
-    await page.getByRole('heading', { name: 'Первая страница ждёт' }).waitFor()
+    await page.getByRole('heading', { name: 'Коллекция ещё не началась' }).waitFor()
+    assert.equal(await page.locator('.journal-empty .botanical-plate').count(), 1)
+    assert.equal(await page.getByRole('button', { name: 'Настройки', exact: true }).count(), 0)
+    if (name === 'Травяной чай') {
+      assert.equal(await page.locator('.journal-index p').textContent(), 'HERBAL TEA · COLLECTION Nº 06')
+      const original = page.viewportSize()
+      for (const [width, height] of [[320, 568], [375, 667], [390, 844], [402, 874], [440, 956]]) {
+        await page.setViewportSize({ width, height })
+        assert.ok(await page.locator('.journal-bar').evaluate(bar => {
+          const actions = bar.querySelectorAll('.journal-icon')
+          return document.documentElement.scrollWidth === innerWidth && [...actions].every(action => {
+            const rect = action.getBoundingClientRect()
+            return rect.width >= 44 && rect.height >= 44
+          })
+        }), width + ' × ' + height)
+      }
+      await page.setViewportSize(original)
+    }
     await page.getByRole('link', { name: 'Все коллекции' }).click()
     await tray.getByRole('link', { name: new RegExp(name) }).waitFor()
     assert.equal(await chestLid(page).count(), 0)
@@ -133,6 +153,8 @@ test('tea chest opens, closes, keeps album navigation and scrolls custom covers 
   assert.equal(scroll.columns, 2)
   assert.ok(scroll.top > 0 && !scroll.horizontal)
   await tray.getByRole('link', { name: /Личная подборка/ }).click()
+  assert.equal(await page.getByRole('heading', { name: longName, exact: true }).textContent(), longName)
+  assert.equal(await page.locator('.journal-index p').textContent(), 'TEA ARCHIVE · COLLECTION Nº 07')
   await page.getByRole('link', { name: 'Все коллекции' }).click()
   await poll(() => tray.evaluate(node => node.scrollTop > 0))
   assert.match(await custom.evaluate(node => getComputedStyle(node).backgroundImage), /\/tea-collection\/sencha\.jpg/)
@@ -167,6 +189,9 @@ test('tea chest opens, closes, keeps album navigation and scrolls custom covers 
   assert.ok(covers.every(cover => cover.sameOrigin && cover.fit === 'cover' && cover.width >= 450 &&
     cover.height >= 450 && cover.size < 200000))
   await page.getByText('Обложки созданы с помощью ИИ', { exact: true }).waitFor()
+  await tray.getByRole('link', { name: /Травяной чай/ }).click()
+  await page.locator('.journal-empty').waitFor()
+  assert.ok(await page.evaluate(async path => (await fetch(path)).ok, scope + 'images/journal-paper.webp'))
 })
 
 test('legacy data, CRUD, backup validation, atomic restore and stale tabs', { timeout: 60000 }, async t => {
@@ -231,7 +256,8 @@ test('legacy data, CRUD, backup validation, atomic restore and stale tabs', { ti
     assert.equal(await page.getByRole('button', { name: 'Сохранить в коллекцию' }).isEnabled(), true)
     assert.deepEqual(await photoSize(preview), [720, 1440])
   }
-  await page.getByLabel('Мои впечатления').fill('Мягкий вкус.')
+  const longNotes = 'Мягкий вкус с цветочными и древесными оттенками. '.repeat(45)
+  await page.getByLabel('Мои впечатления').fill(longNotes)
   await save(page)
   await dialog(page).waitFor({ state: 'hidden' })
   await save(stale)
@@ -267,7 +293,7 @@ test('legacy data, CRUD, backup validation, atomic restore and stale tabs', { ti
     })
     assert.equal(layout.fit, 'contain')
     assert.ok(layout.portion >= .85 && layout.portion <= .95, JSON.stringify(layout))
-    assert.ok(layout.viewport >= .75 && layout.noHorizontalScroll, JSON.stringify(layout))
+    assert.ok(layout.viewport >= .60 && layout.noHorizontalScroll, JSON.stringify(layout))
   }
 
   // The click regions fill exactly 20%, 60%, and 20% of the photo viewport.
@@ -282,6 +308,8 @@ test('legacy data, CRUD, backup validation, atomic restore and stale tabs', { ti
   assert.equal(await center.getAttribute('aria-pressed'), 'false')
   await press(.22)
   await page.getByRole('button', { name: 'Показать фотографию' }).waitFor()
+  assert.ok(await sheet.locator('.notes').evaluate(node => node.scrollHeight > node.clientHeight))
+  assert.equal(await sheet.locator('.notes').textContent(), longNotes.trim())
   await press(.52)
   await page.getByRole('button', { name: 'Показать заметки' }).waitFor()
   await press(.78, 'mouse')
@@ -306,7 +334,7 @@ test('legacy data, CRUD, backup validation, atomic restore and stale tabs', { ti
   await page.evaluate(() => scrollTo(0, 0))
 
   const before = await sheet.boundingBox()
-  await press(.1)
+  await press(.1, 'mouse')
   await poll(async () => (await count.textContent()) === '1 / 2')
   const frames = await outgoing.evaluate(old => new Promise(resolve => {
     const current = old.parentElement.querySelector('[data-position=current]')
@@ -358,7 +386,7 @@ test('legacy data, CRUD, backup validation, atomic restore and stale tabs', { ti
   await page.getByLabel('Название чая').fill('Сэнча весенняя')
   await save(page)
   await page.getByAltText('Сэнча весенняя').waitFor()
-  await settings(page).click()
+  await openSettings(page)
   const downloading = page.waitForEvent('download')
   await page.getByRole('button', { name: 'Экспорт коллекции' }).click()
   const download = await downloading
@@ -368,12 +396,13 @@ test('legacy data, CRUD, backup validation, atomic restore and stale tabs', { ti
   assert.equal(v1.teas[0].photo, legacyPhoto)
   assert.equal(v1.revision, undefined)
   await close(page)
+  await category(page).click()
 
   await edit(page)
   await page.getByRole('button', { name: 'Удалить чай' }).click()
   await page.getByRole('button', { name: 'Удалить', exact: true }).click()
   await page.getByAltText('Гёкуро').waitFor()
-  await settings(page).click()
+  await openSettings(page)
   const folder = await mkdtemp(join(tmpdir(), 'tea-test-'))
   t.after(() => rm(folder, { recursive: true, force: true }))
   const oversized = join(folder, 'oversized.json')
@@ -411,9 +440,11 @@ test('legacy data, CRUD, backup validation, atomic restore and stale tabs', { ti
   await confirm()
   await alert(page).filter({ hasText: 'Хранилище заполнено' }).waitFor()
   await page.reload()
+  await openChest(page)
+  await category(page).click()
   await page.getByAltText('Гёкуро').waitFor()
   assert.equal(await page.locator('.album output').textContent(), '1 / 1')
-  await settings(page).click()
+  await openSettings(page)
   await restore()
   await confirm()
   await category(page).click()

@@ -1,12 +1,14 @@
 import { StrictMode, useEffect, useRef, useState, type FormEvent } from 'react'
 import { createRoot } from 'react-dom/client'
 import { motion, useReducedMotion } from 'motion/react'
-import { ArrowDownToLine, ArrowLeft, ArrowUpFromLine, BookOpen, Check, ChevronRight, Ellipsis, Leaf, Plus, Settings, Trash2 } from 'lucide-react'
+import { ArrowDownToLine, ArrowLeft, ArrowUpFromLine, Check, ChevronRight, Ellipsis, Leaf, Plus, Settings, Trash2 } from 'lucide-react'
 import '@fontsource-variable/lora'
 import '@fontsource-variable/inter'
 import './style.css'
+import './journal.css'
 import { Album } from './Album'
 import { TeaChest } from './TeaChest'
+import { archiveLabel, BotanicalPlate, JournalDivider, JournalFrame } from './JournalArt'
 import { Dialog, TeaEditor } from './Editor'
 import { covers, errorMessage, exportCollection, importCollection, loadCollection, saveCollection, type Category, type Collection, type Tea } from './data'
 
@@ -129,38 +131,43 @@ function App() {
     })
   }
 
-  const albumOpen = !!category && teas.length > 0
-  return <div className={albumOpen ? 'shell album-open' : category ? 'shell' : 'shell chest-shell'}>
-    <header className="topbar">
+  const startTea = () => open({ kind: 'tea' })
+  return <div className={category ? 'shell journal-shell' : 'shell chest-shell'}>
+    {category ? <header className="journal-bar">
+      <a href="#/" className="journal-icon" aria-label="Все коллекции"><ArrowLeft size={23} strokeWidth={1.4} /></a>
+      <span>Tea Collection</span>
+      <button type="button" className="journal-icon journal-add" aria-label="Добавить" onClick={startTea}><Plus size={24} strokeWidth={1.35} /></button>
+    </header> : <header className="topbar">
       <a className="brand" href="#/" aria-label="Tea Collection, главная"><span className="brand-icon"><Leaf size={20} strokeWidth={1.6} /></span><span>Tea Collection</span></a>
       <button className="icon ring" aria-label="Настройки" disabled={!collection} onClick={() => open({ kind: 'settings' })}><Settings size={20} strokeWidth={1.6} /></button>
-    </header>
+    </header>}
     <main>
       {!collection ? <p className="loading" role={failure ? 'alert' : 'status'}>{failure || 'Открываем альбом…'}
         {failure && <button className="text-button" onClick={() => location.reload()}>Обновить страницу</button>}
-      </p> : <motion.div className={albumOpen ? 'album-view' : undefined} key={category?.id ?? 'home'} initial={reduced || albumOpen ? false : { opacity: 0, y: 8 }}
+      </p> : <motion.div className={category ? 'journal-view' : undefined} key={category?.id ?? 'home'} initial={reduced ? false : { opacity: 0, y: category ? 0 : 8 }}
         animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.23 }}>
         {category ? <>
-          <div className="album-heading">
-            <a href="#/" className="text-button back-link" aria-label="Все коллекции"><ArrowLeft size={17} /> <span>Все коллекции</span></a>
-            <div className="album-title">
-              <div><h1>{category.name}</h1><p>{countLabel(teas.length)}</p></div>
-              <div className="actions">
-                <button className="icon ring" aria-label="Настроить коллекцию" onClick={() => open({ kind: 'category', category })}><Ellipsis size={20} /></button>
-                <button className="primary" onClick={() => open({ kind: 'tea' })}><Plus size={18} /> Добавить</button>
-              </div>
+          <div className="journal-heading">
+            <h1>{category.name}</h1>
+            <div className="journal-index">
+              <p>{archiveLabel(category, collection.categories.indexOf(category))}</p>
+              <button type="button" className="journal-icon journal-category" aria-label="Настроить коллекцию"
+                onClick={() => open({ kind: 'category', category })}><Ellipsis size={16} strokeWidth={1.4} /></button>
             </div>
+            <JournalDivider />
           </div>
           {teas.length ? <Album category={category} teas={teas} index={page} change={setIndex} edit={tea => open({ kind: 'tea', tea })} />
-            : <div className="empty"><div className="empty-icon"><BookOpen size={30} strokeWidth={1.4} /></div>
-              <h2>Первая страница ждёт</h2><p>Добавьте чай, чтобы сохранить фотографию и впечатления.</p>
-              <button className="primary" onClick={() => open({ kind: 'tea' })}><Plus size={17} /> Добавить первый чай</button>
-            </div>}
+            : <section className="journal-empty">
+              <JournalFrame />
+              <BotanicalPlate type={category.cover} />
+              <h2>Коллекция ещё не началась</h2>
+              <p>Каждый чай заслуживает своей истории</p>
+              <button type="button" className="journal-first" onClick={startTea}><Plus size={15} strokeWidth={1.4} /> Добавить первый чай</button>
+            </section>}
         </> : <TeaChest collection={collection} open={chestOpen} setOpen={setChestOpen}
           add={() => open({ kind: 'category' })} countLabel={countLabel} scroll={chestScroll} />}
       </motion.div>}
     </main>
-    {category && !albumOpen && <footer><Leaf size={15} /> Tea Collection</footer>}
     {notice && <div className="toast" role="status"><Check size={18} /> {notice}</div>}
     {collection && panel?.kind === 'tea' && category && <TeaEditor tea={panel.tea} category={category.id}
       categories={collection.categories} close={() => open()} save={saveTea} remove={deleteTea} busy={busy} failure={failure} />}
