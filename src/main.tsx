@@ -1,12 +1,12 @@
 import { StrictMode, useEffect, useRef, useState, type FormEvent } from 'react'
 import { createRoot } from 'react-dom/client'
 import { motion, useReducedMotion } from 'motion/react'
-import { ArrowDownToLine, ArrowLeft, ArrowUpFromLine, ArrowUpRight, BookOpen, Check, ChevronRight, Coffee, Ellipsis, Leaf, Plus, Settings, Trash2 } from 'lucide-react'
+import { ArrowDownToLine, ArrowLeft, ArrowUpFromLine, BookOpen, Check, ChevronRight, Ellipsis, Leaf, Plus, Settings, Trash2 } from 'lucide-react'
 import '@fontsource-variable/lora'
 import '@fontsource-variable/inter'
 import './style.css'
-import { Album, Cover } from './Album'
-import { PhotoCredits } from './PhotoCredits'
+import { Album } from './Album'
+import { TeaChest } from './TeaChest'
 import { Dialog, TeaEditor } from './Editor'
 import { covers, errorMessage, exportCollection, importCollection, loadCollection, saveCollection, type Category, type Collection, type Tea } from './data'
 
@@ -31,6 +31,7 @@ function countLabel(count: number) {
 function App() {
   const [collection, setCollection] = useState<Collection>()
   const [activeId, setActiveId] = useState(route)
+  const [chestOpen, setChestOpen] = useState(() => !!route())
   const [index, setIndex] = useState(0)
   const [panel, setPanel] = useState<Panel>()
   const [busy, setBusy] = useState(false)
@@ -38,12 +39,15 @@ function App() {
   const [notice, setNotice] = useState('')
   const pending = useRef(false)
   const nextPage = useRef<number | null>(null)
+  const chestScroll = useRef(0)
   const reduced = useReducedMotion()
 
   useEffect(() => {
     void loadCollection().then(setCollection, error => setFailure(errorMessage(error)))
     function sync() {
-      setActiveId(route())
+      const id = route()
+      if (id) setChestOpen(true)
+      setActiveId(id)
       setIndex(nextPage.current ?? 0)
       nextPage.current = null
     }
@@ -126,7 +130,7 @@ function App() {
   }
 
   const albumOpen = !!category && teas.length > 0
-  return <div className={albumOpen ? 'shell album-open' : 'shell'}>
+  return <div className={albumOpen ? 'shell album-open' : category ? 'shell' : 'shell chest-shell'}>
     <header className="topbar">
       <a className="brand" href="#/" aria-label="Tea Collection, главная"><span className="brand-icon"><Leaf size={20} strokeWidth={1.6} /></span><span>Tea Collection</span></a>
       <button className="icon ring" aria-label="Настройки" disabled={!collection} onClick={() => open({ kind: 'settings' })}><Settings size={20} strokeWidth={1.6} /></button>
@@ -152,31 +156,11 @@ function App() {
               <h2>Первая страница ждёт</h2><p>Добавьте чай, чтобы сохранить фотографию и впечатления.</p>
               <button className="primary" onClick={() => open({ kind: 'tea' })}><Plus size={17} /> Добавить первый чай</button>
             </div>}
-        </> : <>
-          <section className="hero">
-            <div className="hero-copy"><span className="eyebrow"><Leaf size={15} /> Чайный дневник</span>
-              <h1>Tea Collection</h1><p>Моя маленькая история чая</p>
-            </div>
-            <Cover index={0} className="hero-art" />
-          </section>
-          <section aria-labelledby="collections-title">
-            <div className="section-heading"><h2 id="collections-title">Мои коллекции</h2>
-              <button className="outline" onClick={() => open({ kind: 'category' })}><Plus size={17} /> <span>Новая коллекция</span></button>
-            </div>
-            <div className="collection-grid">{collection.categories.map(item =>
-              <a key={item.id} className="collection-card" href={'#/album/' + encodeURIComponent(item.id)}>
-                <Cover index={item.cover} className={item.id === 'tea-' + item.cover ? 'collection-photo' : undefined} />
-                <div className="collection-summary"><div><h3>{item.name}</h3><p>{countLabel(collection.teas.filter(tea => tea.category === item.id).length)}</p></div>
-                  <span className="card-arrow"><ArrowUpRight size={19} strokeWidth={1.75} /></span>
-                </div>
-              </a>)}
-            </div>
-            {!collection.categories.length && <div className="empty"><Coffee size={30} /><p>Создайте коллекцию, чтобы открыть первую страницу альбома.</p></div>}
-          </section>
-        </>}
+        </> : <TeaChest collection={collection} open={chestOpen} setOpen={setChestOpen}
+          add={() => open({ kind: 'category' })} countLabel={countLabel} scroll={chestScroll} />}
       </motion.div>}
     </main>
-    {!albumOpen && <footer><Leaf size={15} /> Tea Collection {collection && !category && <PhotoCredits />}</footer>}
+    {category && !albumOpen && <footer><Leaf size={15} /> Tea Collection</footer>}
     {notice && <div className="toast" role="status"><Check size={18} /> {notice}</div>}
     {collection && panel?.kind === 'tea' && category && <TeaEditor tea={panel.tea} category={category.id}
       categories={collection.categories} close={() => open()} save={saveTea} remove={deleteTea} busy={busy} failure={failure} />}

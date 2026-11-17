@@ -49,6 +49,8 @@ async function fixture(t) {
   return { context, host, url: host + scope, css, changeRelease: next => { release = next } }
 }
 
+const chestLid = page => page.getByRole('button', { name: 'Открыть шкатулку' })
+const openChest = page => chestLid(page).click()
 const category = page => page.getByRole('link', { name: /Зелёный чай/ })
 const settings = page => page.getByRole('button', { name: 'Настройки', exact: true })
 const add = page => page.getByRole('button', { name: 'Добавить', exact: true }).click()
@@ -67,10 +69,36 @@ async function photoSize(locator) {
   })
 }
 
-test('standard covers stay available offline without replacing custom collection covers', { timeout: 35000 }, async t => {
+test('tea chest opens, closes, keeps album navigation and scrolls custom covers offline', { timeout: 35000 }, async t => {
   const { context, url } = await fixture(t)
   const page = await context.newPage()
   await page.goto(url)
+  await chestLid(page).waitFor()
+  const tray = page.locator('.chest-tray')
+  const lid = page.locator('.chest-lid')
+  const angle = () => lid.evaluate(node => {
+    const matrix = new DOMMatrixReadOnly(getComputedStyle(node).transform)
+    return Math.atan2(matrix.m23, matrix.m22) * 180 / Math.PI
+  })
+  assert.equal(await tray.getAttribute('inert'), '')
+  assert.equal(await category(page).count(), 0)
+  await openChest(page)
+  await poll(async () => (await angle()) > 8 && (await angle()) < 100)
+  await poll(async () => (await angle()) > 106)
+  await page.getByRole('button', { name: 'Закрыть шкатулку' }).click()
+  await poll(async () => Math.abs(await angle()) < .1)
+  await chestLid(page).waitFor()
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await openChest(page)
+  assert.ok((await angle()) > 106)
+  for (const name of ['Зелёный чай', 'Чёрный чай', 'Белый чай', 'Улун', 'Пуэр', 'Травяной чай']) {
+    await tray.getByRole('link', { name: new RegExp(name) }).click()
+    await page.getByRole('heading', { name, exact: true }).waitFor()
+    await page.getByRole('heading', { name: 'Первая страница ждёт' }).waitFor()
+    await page.getByRole('link', { name: 'Все коллекции' }).click()
+    await tray.getByRole('link', { name: new RegExp(name) }).waitFor()
+    assert.equal(await chestLid(page).count(), 0)
+  }
   await page.locator('.collection-photo').last().waitFor()
   assert.equal(await page.locator('.collection-photo').count(), 6)
   await page.waitForFunction(() => navigator.serviceWorker.controller)
@@ -80,10 +108,28 @@ test('standard covers stay available offline without replacing custom collection
   await page.getByRole('button', { name: 'Создать коллекцию' }).click()
   const custom = page.getByRole('link', { name: /Личная подборка/ }).locator('.cover')
   await custom.waitFor()
+  assert.equal(await tray.getByRole('link').count(), 7)
+  const scroll = await tray.evaluate(node => {
+    const columns = getComputedStyle(node.firstElementChild).gridTemplateColumns.split(' ').length
+    node.scrollTop = node.scrollHeight
+    return { top: node.scrollTop, columns, horizontal: document.documentElement.scrollWidth > innerWidth }
+  })
+  assert.equal(scroll.columns, 2)
+  assert.ok(scroll.top > 0 && !scroll.horizontal)
+  await tray.getByRole('link', { name: /Личная подборка/ }).click()
+  await page.getByRole('link', { name: 'Все коллекции' }).click()
+  await poll(() => tray.evaluate(node => node.scrollTop > 0))
   assert.match(await custom.evaluate(node => getComputedStyle(node).backgroundImage), /\/tea-collection\/sencha\.jpg/)
   await context.setOffline(true)
   await page.reload()
+  await openChest(page)
   await custom.waitFor()
+  const wood = await page.locator('.tea-chest').evaluate(async node => {
+    const path = getComputedStyle(node).getPropertyValue('--wood').match(/url\(["']?(.*?)["']?\)/)[1]
+    const response = await fetch(new URL(path, location.origin))
+    return response.ok && (await response.arrayBuffer()).byteLength
+  })
+  assert.ok(wood > 0 && wood < 300000)
   assert.equal(await custom.evaluate(node => node.classList.contains('collection-photo')), false)
 
   const covers = await page.locator('.collection-photo').evaluateAll(nodes => Promise.all(nodes.map(async node => {
@@ -135,6 +181,7 @@ test('legacy data, CRUD, backup validation, atomic restore and stale tabs', { ti
     request.onerror = () => reject(request.error)
   }), legacyPhoto)
   await page.goto(url)
+  await openChest(page)
   await category(page).click()
   assert.equal(await page.getByAltText('Сэнча').getAttribute('src'), legacyPhoto)
 
@@ -377,7 +424,7 @@ test('Pages deployment keeps old assets offline until all old tabs close', { tim
   await observer.goto(host)
   const first = await context.newPage()
   await first.goto(url)
-  await category(first).waitFor()
+  await chestLid(first).waitFor()
   await first.waitForFunction(() => navigator.serviceWorker.controller)
   const second = await context.newPage()
   await second.goto(url)
@@ -400,7 +447,7 @@ test('Pages deployment keeps old assets offline until all old tabs close', { tim
   await context.setOffline(true)
   assert.equal(await first.evaluate(async path => (await fetch(path)).ok, scope + css), true)
   await second.reload()
-  await category(second).waitFor()
+  await chestLid(second).waitFor()
   assert.equal(await second.locator('html').getAttribute('data-release'), null)
   await first.close()
   assert.equal(await second.evaluate(async path => (await fetch(path)).ok, scope + css), true)
@@ -415,7 +462,7 @@ test('Pages deployment keeps old assets offline until all old tabs close', { tim
   const updated = await context.newPage()
   const response = await updated.goto(url)
   assert.equal(response.fromServiceWorker(), true)
-  await category(updated).waitFor()
+  await chestLid(updated).waitFor()
   assert.equal(await updated.locator('html').getAttribute('data-release'), 'next')
   const manifest = await updated.evaluate(async () => {
     const link = document.querySelector('link[rel=manifest]')
