@@ -104,11 +104,22 @@ test('tea chest opens, closes, keeps album navigation and scrolls custom covers 
   await page.waitForFunction(() => navigator.serviceWorker.controller)
 
   await page.getByRole('button', { name: 'Новая коллекция' }).click()
-  await page.getByLabel('Название коллекции').fill('Личная подборка')
+  const longName = 'Личная подборка редких весенних чаёв из высокогорных садов Японии'
+  await page.getByLabel('Название коллекции').fill(longName)
   await page.getByRole('button', { name: 'Создать коллекцию' }).click()
   const custom = page.getByRole('link', { name: /Личная подборка/ }).locator('.cover')
   await custom.waitFor()
   assert.equal(await tray.getByRole('link').count(), 7)
+  assert.match(await tray.getByRole('link', { name: /Личная подборка/ }).textContent(), new RegExp(longName))
+  const fits = await tray.locator('.chest-label').evaluateAll(labels => labels.every(label => {
+    const cover = label.parentElement.querySelector('.cover').getBoundingClientRect()
+    const bounds = label.getBoundingClientRect()
+    const style = getComputedStyle(label)
+    return bounds.top > cover.top && Math.abs(bounds.bottom - cover.bottom) < 1
+      && bounds.width <= cover.width && style.backgroundColor === 'rgba(0, 0, 0, 0)'
+      && style.backgroundImage.includes('linear-gradient')
+  }))
+  assert.equal(fits, true)
   const scroll = await tray.evaluate(node => {
     const columns = getComputedStyle(node.firstElementChild).gridTemplateColumns.split(' ').length
     node.scrollTop = node.scrollHeight
@@ -148,10 +159,9 @@ test('tea chest opens, closes, keeps album navigation and scrolls custom covers 
   assert.deepEqual(covers.map(cover => cover.path), ['green', 'black', 'white', 'oolong', 'puer', 'herbal']
     .map(name => scope + 'images/tea/' + name + '.webp'))
   assert.equal(new Set(covers.map(cover => cover.digest)).size, 6)
-  assert.ok(covers.every(cover => cover.sameOrigin && cover.fit === 'cover' && cover.width >= 1000 &&
-    cover.width <= 1400 && cover.height > 0 && cover.size < 200000))
-  await page.getByText('Авторы фото', { exact: true }).click()
-  assert.equal(await page.locator('.photo-credits a[href*="wikimedia.org"]').count(), 6)
+  assert.ok(covers.every(cover => cover.sameOrigin && cover.fit === 'cover' && cover.width >= 450 &&
+    cover.height >= 450 && cover.size < 200000))
+  await page.getByText('Обложки созданы с помощью ИИ', { exact: true }).waitFor()
 })
 
 test('legacy data, CRUD, backup validation, atomic restore and stale tabs', { timeout: 60000 }, async t => {

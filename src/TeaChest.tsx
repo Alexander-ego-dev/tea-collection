@@ -1,7 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, type RefObject } from 'react'
 import { ChevronDown, Plus } from 'lucide-react'
 import { Cover } from './Album'
-import { PhotoCredits } from './PhotoCredits'
 import type { Collection } from './data'
 import './tea-chest.css'
 
@@ -68,7 +67,7 @@ export function TeaChest({ collection, open, setOpen, add, countLabel, scroll }:
       </button>
     </div>
     <div className="chest-foot">
-      {open ? <PhotoCredits /> : <p>Нажми, чтобы открыть</p>}
+      {open ? <small className="chest-image-note">Обложки созданы с помощью ИИ</small> : <p>Нажми, чтобы открыть</p>}
     </div>
   </section>
 }
