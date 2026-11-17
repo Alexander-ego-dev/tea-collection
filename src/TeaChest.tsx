@@ -13,8 +13,8 @@ export function TeaChest({ collection, open, setOpen, add, countLabel, scroll }:
   const content = useRef<HTMLDivElement>(null)
   const moveFocus = useRef(false)
 
-  function toggle(next: boolean) {
-    moveFocus.current = true
+  function toggle(next: boolean, keyboard: boolean) {
+    moveFocus.current = keyboard
     if (!next) scroll.current = 0
     setOpen(next)
   }
@@ -32,7 +32,7 @@ export function TeaChest({ collection, open, setOpen, add, countLabel, scroll }:
 
   return <section className="tea-chest" data-open={open} aria-label="Моя чайная коллекция">
     <div className="chest-toolbar" inert={!open} aria-hidden={!open}>
-      <button ref={close} type="button" className="chest-control" aria-label="Закрыть шкатулку" onClick={() => toggle(false)}>
+      <button ref={close} type="button" className="chest-control" aria-label="Закрыть шкатулку" onClick={event => toggle(false, event.detail === 0)}>
         <ChevronDown size={17} /> Закрыть
       </button>
       <button type="button" className="chest-control" onClick={add}>
@@ -55,7 +55,7 @@ export function TeaChest({ collection, open, setOpen, add, countLabel, scroll }:
         </div>
       </div>
       <button className="chest-lid" ref={lid} type="button" aria-label="Открыть шкатулку"
-        inert={open} aria-hidden={open} onClick={() => toggle(true)}>
+        inert={open} aria-hidden={open} onClick={event => toggle(true, event.detail === 0)}>
         <span className="chest-lid-front">
           <span className="chest-inscription">
             <strong>Tea Collection</strong>
