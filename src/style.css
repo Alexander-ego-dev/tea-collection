@@ -36,7 +36,13 @@ h1, h2, h3, .brand, .polaroid-title { font-family: var(--font-serif); font-weigh
 .cover-3 { background-image:url('/oolong.jpg'); }
 .cover-4 { background-image:url('/puer.jpg'); }
 .cover-5 { background-image:url('/herbal.jpg'); }
-.hero-art { position:absolute; z-index:-2; inset:0 0 0 42%; background-image:url('/sencha.jpg'); }
+.collection-photo.cover-0,.hero-art.cover-0 { background-image:url('/images/tea/green.webp'); }
+.collection-photo.cover-1 { background-image:url('/images/tea/black.webp'); }
+.collection-photo.cover-2 { background-image:url('/images/tea/white.webp'); }
+.collection-photo.cover-3 { background-image:url('/images/tea/oolong.webp'); }
+.collection-photo.cover-4 { background-image:url('/images/tea/puer.webp'); }
+.collection-photo.cover-5 { background-image:url('/images/tea/herbal.webp'); }
+.hero-art { position:absolute; z-index:-2; inset:0 0 0 42%; }
 .hero::after { content:""; position:absolute; z-index:-1; inset:0; background:linear-gradient(90deg,#e8e9da 37%,#e8e9da00 74%); }
 .section-heading { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:16px; }
 .section-heading h2 { font-size:clamp(23px,4vw,34px); letter-spacing:-.035em; }
@@ -55,6 +61,12 @@ h1, h2, h3, .brand, .polaroid-title { font-family: var(--font-serif); font-weigh
 .collection-summary p,.album-title p,.date { color:#646653; font-size:13px; margin-top:5px; }
 .card-arrow { background:#edf0e5; color:#4a5b40; width:35px; height:35px; flex-shrink:0; display:grid; place-items:center; border-radius:50%; }
 footer { margin-top:35px; min-height:65px; border-top:1px solid var(--color-line); display:flex; justify-content:center; align-items:center; gap:8px; color:#5d664f; font-family:var(--font-serif); font-size:13px; }
+.photo-credits summary { display:flex; align-items:center; min-height:44px; cursor:pointer; text-decoration:underline; }
+.photo-credits[open] { flex-basis:100%; padding:0 0 18px; font-family:var(--font-sans); }
+.photo-credits[open] summary { justify-content:center; }
+.photo-credits ul { max-width:550px; margin:auto; padding-inline:14px; line-height:1.65; }
+.photo-credits a { text-decoration:underline; }
+footer:has(.photo-credits) { flex-wrap:wrap; }
 .album-heading,.album,.empty { max-width:565px; margin-inline:auto; }
 .album-heading { margin-block:15px 23px; }
 .back-link { padding-inline:0 9px; }

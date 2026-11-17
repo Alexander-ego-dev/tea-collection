@@ -6,6 +6,7 @@ import '@fontsource-variable/lora'
 import '@fontsource-variable/inter'
 import './style.css'
 import { Album, Cover } from './Album'
+import { PhotoCredits } from './PhotoCredits'
 import { Dialog, TeaEditor } from './Editor'
 import { covers, errorMessage, exportCollection, importCollection, loadCollection, saveCollection, type Category, type Collection, type Tea } from './data'
 
@@ -164,7 +165,7 @@ function App() {
             </div>
             <div className="collection-grid">{collection.categories.map(item =>
               <a key={item.id} className="collection-card" href={'#/album/' + encodeURIComponent(item.id)}>
-                <Cover index={item.cover} />
+                <Cover index={item.cover} className={item.id === 'tea-' + item.cover ? 'collection-photo' : undefined} />
                 <div className="collection-summary"><div><h3>{item.name}</h3><p>{countLabel(collection.teas.filter(tea => tea.category === item.id).length)}</p></div>
                   <span className="card-arrow"><ArrowUpRight size={19} strokeWidth={1.75} /></span>
                 </div>
@@ -175,7 +176,7 @@ function App() {
         </>}
       </motion.div>}
     </main>
-    {!albumOpen && <footer><Leaf size={15} /> Tea Collection</footer>}
+    {!albumOpen && <footer><Leaf size={15} /> Tea Collection {collection && !category && <PhotoCredits />}</footer>}
     {notice && <div className="toast" role="status"><Check size={18} /> {notice}</div>}
     {collection && panel?.kind === 'tea' && category && <TeaEditor tea={panel.tea} category={category.id}
       categories={collection.categories} close={() => open()} save={saveTea} remove={deleteTea} busy={busy} failure={failure} />}

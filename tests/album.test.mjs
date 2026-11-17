@@ -10,7 +10,7 @@ import { chromium, devices } from 'playwright'
 const scope = '/tea-collection/'
 const mime = {
   html: 'text/html', js: 'text/javascript', css: 'text/css', jpg: 'image/jpeg',
-  png: 'image/png', woff2: 'font/woff2', webmanifest: 'application/manifest+json',
+  png: 'image/png', webp: 'image/webp', woff2: 'font/woff2', webmanifest: 'application/manifest+json',
 }
 
 async function fixture(t) {
@@ -66,6 +66,47 @@ async function photoSize(locator) {
     return [image.naturalWidth, image.naturalHeight]
   })
 }
+
+test('standard covers stay available offline without replacing custom collection covers', { timeout: 35000 }, async t => {
+  const { context, url } = await fixture(t)
+  const page = await context.newPage()
+  await page.goto(url)
+  await page.locator('.collection-photo').last().waitFor()
+  assert.equal(await page.locator('.collection-photo').count(), 6)
+  await page.waitForFunction(() => navigator.serviceWorker.controller)
+
+  await page.getByRole('button', { name: 'Новая коллекция' }).click()
+  await page.getByLabel('Название коллекции').fill('Личная подборка')
+  await page.getByRole('button', { name: 'Создать коллекцию' }).click()
+  const custom = page.getByRole('link', { name: /Личная подборка/ }).locator('.cover')
+  await custom.waitFor()
+  assert.match(await custom.evaluate(node => getComputedStyle(node).backgroundImage), /\/tea-collection\/sencha\.jpg/)
+  await context.setOffline(true)
+  await page.reload()
+  await custom.waitFor()
+  assert.equal(await custom.evaluate(node => node.classList.contains('collection-photo')), false)
+
+  const covers = await page.locator('.collection-photo').evaluateAll(nodes => Promise.all(nodes.map(async node => {
+    const style = getComputedStyle(node)
+    const url = new URL(style.backgroundImage.slice(5, -2))
+    const response = await fetch(url)
+    if (!response.ok) throw new Error('Cover not cached: ' + url)
+    const bytes = await response.arrayBuffer()
+    const image = new Image()
+    image.src = url.href
+    await image.decode()
+    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)).join(',')
+    return { path: url.pathname, sameOrigin: url.origin === location.origin, width: image.naturalWidth,
+      height: image.naturalHeight, size: bytes.byteLength, digest, fit: style.backgroundSize }
+  })))
+  assert.deepEqual(covers.map(cover => cover.path), ['green', 'black', 'white', 'oolong', 'puer', 'herbal']
+    .map(name => scope + 'images/tea/' + name + '.webp'))
+  assert.equal(new Set(covers.map(cover => cover.digest)).size, 6)
+  assert.ok(covers.every(cover => cover.sameOrigin && cover.fit === 'cover' && cover.width >= 1000 &&
+    cover.width <= 1400 && cover.height > 0 && cover.size < 200000))
+  await page.getByText('Авторы фото', { exact: true }).click()
+  assert.equal(await page.locator('.photo-credits a[href*="wikimedia.org"]').count(), 6)
+})
 
 test('legacy data, CRUD, backup validation, atomic restore and stale tabs', { timeout: 60000 }, async t => {
   const { context, host, url } = await fixture(t)
