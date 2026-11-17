@@ -124,7 +124,8 @@ function App() {
     })
   }
 
-  return <div className="shell">
+  const albumOpen = !!category && teas.length > 0
+  return <div className={albumOpen ? 'shell album-open' : 'shell'}>
     <header className="topbar">
       <a className="brand" href="#/" aria-label="Tea Collection, главная"><span className="brand-icon"><Leaf size={20} strokeWidth={1.6} /></span><span>Tea Collection</span></a>
       <button className="icon ring" aria-label="Настройки" disabled={!collection} onClick={() => open({ kind: 'settings' })}><Settings size={20} strokeWidth={1.6} /></button>
@@ -132,11 +133,11 @@ function App() {
     <main>
       {!collection ? <p className="loading" role={failure ? 'alert' : 'status'}>{failure || 'Открываем альбом…'}
         {failure && <button className="text-button" onClick={() => location.reload()}>Обновить страницу</button>}
-      </p> : <motion.div key={category?.id ?? 'home'} initial={reduced ? false : { opacity: 0, y: 8 }}
+      </p> : <motion.div className={albumOpen ? 'album-view' : undefined} key={category?.id ?? 'home'} initial={reduced || albumOpen ? false : { opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.23 }}>
         {category ? <>
           <div className="album-heading">
-            <a href="#/" className="text-button back-link"><ArrowLeft size={17} /> Все коллекции</a>
+            <a href="#/" className="text-button back-link" aria-label="Все коллекции"><ArrowLeft size={17} /> <span>Все коллекции</span></a>
             <div className="album-title">
               <div><h1>{category.name}</h1><p>{countLabel(teas.length)}</p></div>
               <div className="actions">
@@ -174,7 +175,7 @@ function App() {
         </>}
       </motion.div>}
     </main>
-    <footer><Leaf size={15} /> Tea Collection</footer>
+    {!albumOpen && <footer><Leaf size={15} /> Tea Collection</footer>}
     {notice && <div className="toast" role="status"><Check size={18} /> {notice}</div>}
     {collection && panel?.kind === 'tea' && category && <TeaEditor tea={panel.tea} category={category.id}
       categories={collection.categories} close={() => open()} save={saveTea} remove={deleteTea} busy={busy} failure={failure} />}
