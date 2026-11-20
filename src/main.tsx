@@ -1,15 +1,14 @@
-import { StrictMode, useEffect, useRef, useState, type FormEvent } from 'react'
+import { StrictMode, useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { motion, useReducedMotion } from 'motion/react'
-import { ArrowDownToLine, ArrowLeft, ArrowUpFromLine, Check, ChevronRight, Ellipsis, Leaf, Plus, Settings, Trash2 } from 'lucide-react'
+import { ArrowDownToLine, ArrowLeft, ArrowUpFromLine, Check, ChevronRight, Plus, Settings, Trash2 } from 'lucide-react'
 import '@fontsource-variable/lora'
 import '@fontsource-variable/inter'
 import './style.css'
 import './journal.css'
 import { Album } from './Album'
-import { TeaChest } from './TeaChest'
-import { archiveLabel, BotanicalPlate, JournalDivider, JournalFrame } from './JournalArt'
-import { Dialog, TeaEditor } from './Editor'
+import { TeaBook } from './TeaBook'
+import { CategoryEditor, Dialog, TeaEditor } from './Editor'
 import { covers, errorMessage, exportCollection, importCollection, loadCollection, saveCollection, type Category, type Collection, type Tea } from './data'
 
 type Panel =
@@ -33,25 +32,21 @@ function countLabel(count: number) {
 function App() {
   const [collection, setCollection] = useState<Collection>()
   const [activeId, setActiveId] = useState(route)
-  const [chestOpen, setChestOpen] = useState(() => !!route())
-  const [index, setIndex] = useState(0)
+  const [bookOpen, setBookOpen] = useState(() => !!route())
   const [panel, setPanel] = useState<Panel>()
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState('')
   const [notice, setNotice] = useState('')
   const pending = useRef(false)
-  const nextPage = useRef<number | null>(null)
-  const chestScroll = useRef(0)
+  const bookScroll = useRef(0)
   const reduced = useReducedMotion()
 
   useEffect(() => {
     void loadCollection().then(setCollection, error => setFailure(errorMessage(error)))
     function sync() {
       const id = route()
-      if (id) setChestOpen(true)
+      if (id) setBookOpen(true)
       setActiveId(id)
-      setIndex(nextPage.current ?? 0)
-      nextPage.current = null
     }
     window.addEventListener('hashchange', sync)
     return () => window.removeEventListener('hashchange', sync)
@@ -64,7 +59,6 @@ function App() {
 
   const category = collection?.categories.find(item => item.id === activeId)
   const teas = collection?.teas.filter(tea => tea.category === activeId) ?? []
-  const page = Math.min(index, Math.max(0, teas.length - 1))
   function open(value?: Panel) { setFailure(''); setPanel(value) }
   async function run(action: () => Promise<void>) {
     if (pending.current) return
@@ -89,9 +83,7 @@ function App() {
     const exists = collection.teas.some(item => item.id === tea.id)
     const entries = exists ? collection.teas.map(item => item.id === tea.id ? tea : item) : [...collection.teas, tea]
     commit({ ...collection, teas: entries }, exists ? 'Изменения сохранены' : 'Чай добавлен в альбом', () => {
-      const position = entries.filter(item => item.category === tea.category).findIndex(item => item.id === tea.id)
-      if (activeId !== tea.category) { nextPage.current = position; navigate(tea.category) }
-      else setIndex(position)
+      if (activeId !== tea.category) navigate(tea.category)
     })
   }
   function deleteTea(tea: Tea) {
@@ -100,17 +92,15 @@ function App() {
       next: { ...collection, teas: collection.teas.filter(item => item.id !== tea.id) },
       success: 'Чай удалён', destructive: true })
   }
-  function saveCategory(event: FormEvent<HTMLFormElement>, item?: Category) {
-    event.preventDefault()
+  function saveCategory(name: string, photo: { photo: string; sourcePhoto: string }, item?: Category) {
     if (!collection) return
-    const name = String(new FormData(event.currentTarget).get('name')).trim()
     if (!name) { setFailure('Введите название коллекции.'); return }
     if (collection.categories.some(entry => entry.id !== item?.id && entry.name.toLocaleLowerCase('ru') === name.toLocaleLowerCase('ru'))) {
       setFailure('Коллекция с таким названием уже есть.')
       return
     }
-    const categories = item ? collection.categories.map(entry => entry.id === item.id ? { ...entry, name } : entry)
-      : [...collection.categories, { id: crypto.randomUUID(), name, cover: collection.categories.length % covers.length }]
+    const categories = item ? collection.categories.map(entry => entry.id === item.id ? { ...entry, name, ...photo } : entry)
+      : [...collection.categories, { id: crypto.randomUUID(), name, cover: collection.categories.length % covers.length, ...photo }]
     commit({ ...collection, categories }, item ? 'Название сохранено' : 'Коллекция создана')
   }
   function deleteCategory(item: Category) {
@@ -132,40 +122,23 @@ function App() {
   }
 
   const startTea = () => open({ kind: 'tea' })
-  return <div className={category ? 'shell journal-shell' : 'shell chest-shell'}>
+  return <div className={category ? 'shell journal-shell' : 'shell library-shell'}>
     {category ? <header className="journal-bar">
       <a href="#/" className="journal-icon" aria-label="Все коллекции"><ArrowLeft size={23} strokeWidth={1.4} /></a>
-      <span>Tea Collection</span>
+      <h1>{category.name}</h1>
       <button type="button" className="journal-icon journal-add" aria-label="Добавить" onClick={startTea}><Plus size={24} strokeWidth={1.35} /></button>
     </header> : <header className="topbar">
-      <a className="brand" href="#/" aria-label="Tea Collection, главная"><span className="brand-icon"><Leaf size={20} strokeWidth={1.6} /></span><span>Tea Collection</span></a>
-      <button className="icon ring" aria-label="Настройки" disabled={!collection} onClick={() => open({ kind: 'settings' })}><Settings size={20} strokeWidth={1.6} /></button>
+        <button className="icon ring" aria-label="Настройки" disabled={!collection} onClick={() => open({ kind: 'settings' })}><Settings size={20} strokeWidth={1.6} /></button>
     </header>}
     <main>
       {!collection ? <p className="loading" role={failure ? 'alert' : 'status'}>{failure || 'Открываем альбом…'}
         {failure && <button className="text-button" onClick={() => location.reload()}>Обновить страницу</button>}
       </p> : <motion.div className={category ? 'journal-view' : undefined} key={category?.id ?? 'home'} initial={reduced ? false : { opacity: 0, y: category ? 0 : 8 }}
         animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.23 }}>
-        {category ? <>
-          <div className="journal-heading">
-            <h1>{category.name}</h1>
-            <div className="journal-index">
-              <p>{archiveLabel(category, collection.categories.indexOf(category))}</p>
-              <button type="button" className="journal-icon journal-category" aria-label="Настроить коллекцию"
-                onClick={() => open({ kind: 'category', category })}><Ellipsis size={16} strokeWidth={1.4} /></button>
-            </div>
-            <JournalDivider />
-          </div>
-          {teas.length ? <Album category={category} teas={teas} index={page} change={setIndex} edit={tea => open({ kind: 'tea', tea })} />
-            : <section className="journal-empty">
-              <JournalFrame />
-              <BotanicalPlate type={category.cover} />
-              <h2>Коллекция ещё не началась</h2>
-              <p>Каждый чай заслуживает своей истории</p>
-              <button type="button" className="journal-first" onClick={startTea}><Plus size={15} strokeWidth={1.4} /> Добавить первый чай</button>
-            </section>}
-        </> : <TeaChest collection={collection} open={chestOpen} setOpen={setChestOpen}
-          add={() => open({ kind: 'category' })} countLabel={countLabel} scroll={chestScroll} />}
+        {category ? <Album key={category.id} teas={teas} edit={tea => open({ kind: 'tea', tea })} add={startTea} />
+          : <TeaBook collection={collection} open={bookOpen} setOpen={setBookOpen}
+            add={() => open({ kind: 'category' })} edit={category => open({ kind: 'category', category })}
+            countLabel={countLabel} scroll={bookScroll} />}
       </motion.div>}
     </main>
     {notice && <div className="toast" role="status"><Check size={18} /> {notice}</div>}
@@ -179,15 +152,8 @@ function App() {
       </label>
       {failure && <p className="error" role="alert">{failure}</p>}
     </Dialog>}
-    {panel?.kind === 'category' && <Dialog title={panel.category ? 'Настройки коллекции' : 'Новая коллекция'} close={() => open()} busy={busy}>
-      <form onSubmit={event => saveCategory(event, panel.category)}>
-        <label>Название коллекции<input name="name" required maxLength={80} defaultValue={panel.category?.name} /></label>
-        {failure && <p className="error" role="alert">{failure}</p>}
-        <button className="primary" disabled={busy}>{panel.category ? 'Сохранить название' : 'Создать коллекцию'}</button>
-        {panel.category && <button className="danger text-button" type="button" disabled={busy} onClick={() => { if (panel.category) deleteCategory(panel.category) }}>
-          <Trash2 size={17} /> Удалить коллекцию</button>}
-      </form>
-    </Dialog>}
+    {panel?.kind === 'category' && <CategoryEditor category={panel.category} close={() => open()}
+      save={(name, photo) => saveCategory(name, photo, panel.category)} remove={deleteCategory} busy={busy} failure={failure} />}
     {panel?.kind === 'confirm' && <Dialog title={panel.title} close={() => open()} busy={busy}>
       <p className="muted">{panel.description}</p>
       {failure && <p className="error" role="alert">{failure}</p>}

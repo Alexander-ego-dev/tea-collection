@@ -1,12 +1,13 @@
 export const covers = ['Зелёный чай', 'Чёрный чай', 'Белый чай', 'Улун', 'Пуэр', 'Травяной чай']
-export type Category = { id: string; name: string; cover: number }
+export const brands = ['Curtis', 'Greenfield', 'Tess', 'Ahmad Tea', 'Richard']
+export type Category = { id: string; name: string; cover: number; photo?: string; sourcePhoto?: string }
 export type Tea = {
   id: string; category: string; name: string; photo: string; notes: string
-  rating: number; tasted: string; added: string
+  rating: number; tasted: string; added: string; sourcePhoto?: string
 }
 export type Collection = { categories: Category[]; teas: Tea[]; revision?: string }
 const initial: Collection = {
-  categories: covers.map((name, cover) => ({ id: 'tea-' + cover, name, cover })), teas: [],
+  categories: brands.map((name, cover) => ({ id: 'brand-' + cover, name, cover })), teas: [],
 }
 
 const database = new Promise<IDBDatabase>((resolve, reject) => {
@@ -22,10 +23,14 @@ const database = new Promise<IDBDatabase>((resolve, reject) => {
 export async function loadCollection(): Promise<Collection> {
   const db = await database
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction('album')
+    const transaction = db.transaction('album', 'readwrite')
     const store = transaction.objectStore('album')
     const content = store.get('collection')
     const revision = store.get('revision')
+    content.onsuccess = () => {
+      // Only a genuinely empty database receives the new starter brands.
+      if (content.result === undefined) store.put(initial, 'collection')
+    }
     transaction.oncomplete = () => resolve({ ...(content.result ?? initial), revision: revision.result })
     transaction.onabort = () => reject(transaction.error)
   })
@@ -83,7 +88,7 @@ function readBlob<T>(blob: Blob, read: (reader: FileReader, blob: Blob) => void,
   })
 }
 
-function decodeImage(source: string) {
+export function decodeImage(source: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const image = new Image()
     // Let the browser apply EXIF orientation and HEIF display transforms once.
@@ -206,13 +211,19 @@ export async function importCollection(file: File): Promise<Collection> {
     if (error instanceof RangeError) throw new Error('Не хватило памяти, чтобы открыть резервную копию.')
     throw invalid()
   }
-  if (!record(value) || value.version !== 1 || !Array.isArray(value.categories) || !Array.isArray(value.teas)) throw invalid()
+  if (!record(value) || ![1, 2].includes(Number(value.version)) || typeof value.version !== 'number'
+    || !Array.isArray(value.categories) || !Array.isArray(value.teas)) throw invalid()
   const categoryIds = new Set<string>()
   for (const category of value.categories) {
     if (!record(category) || typeof category.id !== 'string' || !named(category.id, 100) || categoryIds.has(category.id)
       || !named(category.name, 80) || typeof category.cover !== 'number'
       || !Number.isInteger(category.cover) || category.cover < 0 || category.cover >= covers.length) throw invalid()
     categoryIds.add(category.id)
+    for (const field of ['photo', 'sourcePhoto']) {
+      const photo = category[field]
+      if (photo !== undefined && typeof photo !== 'string') throw invalid()
+      if (photo) await validateBackupPhoto(photo as string)
+    }
   }
   const teaIds = new Set<string>()
   const teas: Tea[] = []
@@ -224,11 +235,15 @@ export async function importCollection(file: File): Promise<Collection> {
       || !validDate(tea.added) || (tea.tasted !== '' && !validDate(tea.tasted))
       || typeof tea.photo !== 'string') throw invalid()
     if (tea.photo) await validateBackupPhoto(tea.photo)
+    if (tea.sourcePhoto !== undefined && typeof tea.sourcePhoto !== 'string') throw invalid()
+    if (tea.sourcePhoto) await validateBackupPhoto(tea.sourcePhoto as string)
     teaIds.add(tea.id)
-    const { id, category, name, photo, notes, rating, tasted, added } = tea as Tea
-    teas.push({ id, category, name, photo, notes, rating, tasted, added })
+    const { id, category, name, photo, notes, rating, tasted, added, sourcePhoto } = tea as Tea
+    teas.push({ id, category, name, photo, notes, rating, tasted, added, ...(sourcePhoto ? { sourcePhoto } : {}) })
   }
-  return { categories: value.categories.map(({ id, name, cover }) => ({ id, name, cover })), teas }
+  return { categories: value.categories.map(({ id, name, cover, photo, sourcePhoto }) => ({
+    id, name, cover, ...(photo ? { photo } : {}), ...(sourcePhoto ? { sourcePhoto } : {}),
+  })), teas }
 }
 
 async function validateBackupPhoto(photo: string) {
@@ -260,10 +275,10 @@ async function validateBackupPhoto(photo: string) {
 
 export async function exportCollection({ categories, teas }: Collection) {
   const name = 'tea-collection-' + today() + '.json'
-  // Emit the same v1 document in parts to avoid serializing the entire album into one string.
+  // Version 2 adds collection covers and originals for reversible square cropping.
   let file: File
   try {
-    const parts = ['{"version":1,"categories":', JSON.stringify(categories), ',"teas":[']
+    const parts = ['{"version":2,"categories":', JSON.stringify(categories), ',"teas":[']
     for (const [index, tea] of teas.entries()) {
       if (index) parts.push(',')
       parts.push(JSON.stringify(tea))

@@ -1,0 +1,35 @@
+.package-album { width:100%; max-width:470px; margin-inline:auto; }
+.package-grid {
+  display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px 13px;
+  width:clamp(280px,calc((100svh - 116px - env(safe-area-inset-top) - env(safe-area-inset-bottom)) / 2),440px); max-width:100%;
+  margin-inline:auto; padding:6px 2px 30px;
+}
+.package-slot {
+  position:relative; aspect-ratio:1; min-width:0;
+  background:#ebe1d1; box-shadow:inset 0 1px 4px #5b472435,0 1px 0 #fff9eb;
+  border-radius:2px; perspective:900px;
+}
+.package-toggle { display:block; position:absolute; inset:4px; width:calc(100% - 8px); height:calc(100% - 8px); }
+.package-toggle:focus-visible { outline-offset:2px; }
+.package-flip { display:block; width:100%; height:100%; position:relative; transform-style:preserve-3d; transition:transform 400ms cubic-bezier(.22,.72,.24,1); }
+.package-flip.is-turned { transform:rotateY(180deg); }
+.package-face {
+  position:absolute; inset:0; display:flex; -webkit-backface-visibility:hidden; backface-visibility:hidden;
+  background:#f7efdf; overflow:hidden;
+}
+.package-front { transform:rotateY(0); }
+.package-front img { display:block; width:100%; height:100%; object-fit:contain; border:1px solid #b6a68b5e; }
+.package-front::after {
+  content:""; position:absolute; inset:0; pointer-events:none;
+  background:linear-gradient(135deg,#e9dfc8 6px,transparent 6px) top left,
+    linear-gradient(315deg,#e9dfc8 6px,transparent 6px) bottom right;
+  background-size:13px 13px; background-repeat:no-repeat;
+}
+.package-back { transform:rotateY(180deg); flex-direction:column; padding:10px 9px 24px; gap:6px; text-align:left; }
+.package-name { font:400 clamp(12px,3.7vw,17px)/1.17 var(--font-serif); overflow-wrap:anywhere; flex-shrink:0; max-height:43%; overflow:auto; }
+.package-rating { display:flex; gap:3px; color:#967a3f; flex-shrink:0; }
+.package-notes { min-height:0; flex:1; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; font:400 clamp(10px,2.8vw,12px)/1.4 var(--font-sans); color:#75614a; border-top:1px solid #bbaa8c70; padding-top:5px; }
+.package-edit { position:absolute; width:44px; height:44px; right:0; bottom:0; display:grid; place-items:end; padding:6px; color:#927d60; background:radial-gradient(at bottom right,#f6eddfdd,transparent 65%); }
+.package-empty { display:grid; place-items:center; color:#ad9a7d; border:1px solid #c8b99e66; }
+.missing-package { padding:10px; display:grid; place-items:center; width:100%; font:400 14px/1.3 var(--font-serif); color:#938064; }
+@media(prefers-reduced-motion:reduce) { .package-flip { transition:none; } }
