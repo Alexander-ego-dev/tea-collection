@@ -49,7 +49,7 @@ export function TeaBook({ collection, open, setOpen, add, edit, countLabel, scro
     <button className="book-cover" ref={lid} type="button" aria-label="Открыть книгу" inert={open} aria-hidden={open}
       onClick={event => toggle(true, event.detail === 0)}>
       <span className="book-cover-front">
-        <span className="book-emboss"><strong>Tea Collection</strong><i /><span>Моя чайная коллекция</span></span>
+        <span className="book-emboss"><strong>TEA COLLECTIONS</strong></span>
       </span>
       <span className="book-cover-back" aria-hidden="true" />
     </button>
